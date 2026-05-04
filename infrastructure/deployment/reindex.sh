@@ -59,17 +59,21 @@ fetch_latest_run_since() {
   echo >&2
 
   echo "DEBUG: response JSON type:" >&2
-  jq -r 'type' "$tmp" >&2 || {
-    echo "ERROR: response is not valid JSON" >&2
-    rm -f "$tmp"
-    return 1
-  }
+  json_type=$(jq -r 'type' "$tmp")
 
-  if [ "$(jq -r 'type' "$tmp")" != "array" ]; then
+  if [ "$json_type" != "array" ]; then
+    code=$(jq -r '.code // .data.code // empty' "$tmp")
+
+    if [ "$code" = "UNAUTHORIZED" ]; then
+      echo "DEBUG: token is unauthorized/expired" >&2
+      rm -f "$tmp"
+      return 2
+    fi
+
     echo "ERROR: expected JSON array from /events/reindex, got:" >&2
     jq -c '.' "$tmp" >&2
     rm -f "$tmp"
-    return 2
+    return 1
   fi
 
   jq -c --arg since "$since" \
@@ -99,24 +103,25 @@ while true; do
   fi
   polls=$(( ${polls:-0} + 1 ))
 
-  RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME")
-  rc=$?
+  if RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME"); then
+    :
+  else
+    rc=$?
 
-  if [ "$rc" -ne 0 ]; then
     if [ "$rc" -eq 2 ]; then
-      echo "  Token expired, refreshing token..."
-      TOKEN=$(get_reindexing_token)
+        echo "  Token expired, refreshing token..."
+        TOKEN=$(get_reindexing_token)
 
-      RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME")
-      rc=$?
-
-      if [ "$rc" -ne 0 ]; then
-        echo "ERROR: failed to fetch reindex status after refreshing token."
+        if RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME"); then
+          :
+        else
+          echo "ERROR: failed to fetch reindex status after refreshing token."
+          exit 1
+        fi
+      else
+        echo "ERROR: failed to fetch reindex status."
         exit 1
       fi
-    else
-      exit 1
-    fi
   fi
 
   if [ -z "$RUN" ]; then
