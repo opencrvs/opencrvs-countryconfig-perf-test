@@ -9,10 +9,10 @@
  * Copyright (C) The OpenCRVS Authors located at https://github.com/opencrvs/opencrvs-core/blob/master/AUTHORS.
  */
 import { logger, maskEmail, maskSms } from '@countryconfig/logger'
+import { env } from '@countryconfig/environment'
 import * as Hapi from '@hapi/hapi'
 import * as Joi from 'joi'
 import { COUNTRY_LOGO_URL, SENDER_EMAIL_ADDRESS } from './constant'
-import { env } from '../../environment'
 import { sendEmail } from './email-service'
 import { InformantTemplateType, getSMSTemplate, sendSMS } from './sms-service'
 import {
@@ -30,7 +30,6 @@ import {
 import { LOGIN_URL } from '@countryconfig/constants'
 import { applicationConfig } from '../application/application-config'
 import { NameFieldValue } from '@opencrvs/toolkit/events'
-import { tr } from 'date-fns/locale'
 
 type EmailPayloads = {
   subject: string
@@ -54,7 +53,7 @@ export async function emailHandler(
 
   if (env.NOTIFICATIONS_ENABLED !== true) {
     logger.info(
-      `Ignoring email due to NOTIFICATIONS_ENABLED not being 'true'. Params: ${JSON.stringify(
+      `Ignoring email due to NOTIFICATIONS_ENABLED not being true. Params: ${JSON.stringify(
         { ...payload, from: maskEmail(payload.from), to: maskEmail(payload.to) }
       )}`
     )
@@ -168,7 +167,7 @@ export async function notify({
     const emailBody = renderTemplate(template, variable)
 
     if (env.NOTIFICATIONS_ENABLED !== true) {
-      console.log(
+      logger.debug(
         `Sending email to ${email} with subject: ${subject}, body: ${JSON.stringify(emailBody)}`
       )
       return
