@@ -32,13 +32,34 @@ fire_trigger() {
 fetch_latest_run_since() {
   local token=$1
   local since
+  local tmp
+  local http_code
+
   since=$(echo "$2" | cut -c1-19)
-  curl -s \
+  tmp=$(mktemp)
+
+  http_code=$(curl -s -w "%{http_code}" -o "$tmp" \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
-    "${EVENTS_URL%/}/events/reindex" \
-  | jq -c --arg since "$since" \
-    'map(select(.timestamp[0:19] >= $since)) | sort_by(.timestamp) | reverse | .[0] // empty'
+    "${EVENTS_URL%/}/events/reindex")
+
+  if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+    rm -f "$tmp"
+    return 2
+  fi
+
+  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+    echo "ERROR: failed to fetch reindex status, HTTP ${http_code}" >&2
+    cat "$tmp" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+
+  jq -c --arg since "$since" \
+    'map(select(.timestamp[0:19] >= $since)) | sort_by(.timestamp) | reverse | .[0] // empty' \
+    "$tmp"
+
+  rm -f "$tmp"
 }
 
 TRIGGER_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S")
@@ -62,6 +83,24 @@ while true; do
   polls=$(( ${polls:-0} + 1 ))
 
   RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME")
+  rc=$?
+
+  if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 2 ]; then
+      echo "  Token expired, refreshing token..."
+      TOKEN=$(get_reindexing_token)
+
+      RUN=$(fetch_latest_run_since "$TOKEN" "$TRIGGER_TIME")
+      rc=$?
+
+      if [ "$rc" -ne 0 ]; then
+        echo "ERROR: failed to fetch reindex status after refreshing token."
+        exit 1
+      fi
+    else
+      exit 1
+    fi
+  fi
 
   if [ -z "$RUN" ]; then
     echo "  Waiting for reindex to start... (${polls})"
