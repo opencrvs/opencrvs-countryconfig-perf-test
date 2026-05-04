@@ -12,6 +12,7 @@ import { logger, maskEmail, maskSms } from '@countryconfig/logger'
 import * as Hapi from '@hapi/hapi'
 import * as Joi from 'joi'
 import { COUNTRY_LOGO_URL, SENDER_EMAIL_ADDRESS } from './constant'
+import { env } from '../../environment'
 import { sendEmail } from './email-service'
 import { InformantTemplateType, getSMSTemplate, sendSMS } from './sms-service'
 import {
@@ -29,6 +30,7 @@ import {
 import { LOGIN_URL } from '@countryconfig/constants'
 import { applicationConfig } from '../application/application-config'
 import { NameFieldValue } from '@opencrvs/toolkit/events'
+import { tr } from 'date-fns/locale'
 
 type EmailPayloads = {
   subject: string
@@ -50,9 +52,9 @@ export async function emailHandler(
 ) {
   const payload = request.payload as EmailPayloads
 
-  if (process.env.NODE_ENV !== 'production' || process.env.NOTIFICATIONS_ENABLED !== 'true') {
+  if (env.NOTIFICATIONS_ENABLED !== true) {
     logger.info(
-      `Ignoring email due to NODE_ENV not being 'production'. Params: ${JSON.stringify(
+      `Ignoring email due to NOTIFICATIONS_ENABLED not being 'true'. Params: ${JSON.stringify(
         { ...payload, from: maskEmail(payload.from), to: maskEmail(payload.to) }
       )}`
     )
@@ -165,7 +167,7 @@ export async function notify({
     const subject = 'subject' in variable ? variable.subject : template.subject
     const emailBody = renderTemplate(template, variable)
 
-    if (process.env.NODE_ENV === 'development') {
+    if (env.NOTIFICATIONS_ENABLED !== true) {
       console.log(
         `Sending email to ${email} with subject: ${subject}, body: ${JSON.stringify(emailBody)}`
       )
