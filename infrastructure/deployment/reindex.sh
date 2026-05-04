@@ -34,19 +34,17 @@ fetch_latest_run_since() {
   local since
   local response
   local tmp
+  local json_type
+  local code
 
   since=$(echo "$2" | cut -c1-19)
   tmp=$(mktemp)
-
-  echo "DEBUG: fetching reindex runs since: $since" >&2
-  echo "DEBUG: events endpoint: ${EVENTS_URL%/}/events/reindex" >&2
-  echo "DEBUG: token prefix: $(echo "$token" | cut -c1-12)..." >&2
 
   response=$(curl -sS \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
     "${EVENTS_URL%/}/events/reindex" 2>&1) || {
-      echo "ERROR: curl failed" >&2
+      echo "ERROR: failed to fetch reindex status:" >&2
       echo "$response" >&2
       rm -f "$tmp"
       return 1
@@ -54,23 +52,23 @@ fetch_latest_run_since() {
 
   printf '%s' "$response" > "$tmp"
 
-  echo "DEBUG: raw response:" >&2
-  cat "$tmp" >&2
-  echo >&2
-
-  echo "DEBUG: response JSON type:" >&2
-  json_type=$(jq -r 'type' "$tmp")
+  json_type=$(jq -r 'type' "$tmp" 2>/dev/null) || {
+    echo "ERROR: reindex status response is not valid JSON:" >&2
+    cat "$tmp" >&2
+    rm -f "$tmp"
+    return 1
+  }
 
   if [ "$json_type" != "array" ]; then
     code=$(jq -r '.code // .data.code // empty' "$tmp")
 
     if [ "$code" = "UNAUTHORIZED" ]; then
-      echo "DEBUG: token is unauthorized/expired" >&2
+      echo "WARN: reindex status token expired; refreshing token..." >&2
       rm -f "$tmp"
       return 2
     fi
 
-    echo "ERROR: expected JSON array from /events/reindex, got:" >&2
+    echo "ERROR: unexpected reindex status response:" >&2
     jq -c '.' "$tmp" >&2
     rm -f "$tmp"
     return 1
