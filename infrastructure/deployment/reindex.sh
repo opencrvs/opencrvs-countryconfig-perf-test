@@ -32,27 +32,44 @@ fire_trigger() {
 fetch_latest_run_since() {
   local token=$1
   local since
+  local response
   local tmp
-  local http_code
 
   since=$(echo "$2" | cut -c1-19)
   tmp=$(mktemp)
 
-  http_code=$(curl -s -w "%{http_code}" -o "$tmp" \
+  echo "DEBUG: fetching reindex runs since: $since" >&2
+  echo "DEBUG: events endpoint: ${EVENTS_URL%/}/events/reindex" >&2
+  echo "DEBUG: token prefix: $(echo "$token" | cut -c1-12)..." >&2
+
+  response=$(curl -sS \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
-    "${EVENTS_URL%/}/events/reindex")
+    "${EVENTS_URL%/}/events/reindex" 2>&1) || {
+      echo "ERROR: curl failed" >&2
+      echo "$response" >&2
+      rm -f "$tmp"
+      return 1
+    }
 
-  if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
-    rm -f "$tmp"
-    return 2
-  fi
+  printf '%s' "$response" > "$tmp"
 
-  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-    echo "ERROR: failed to fetch reindex status, HTTP ${http_code}" >&2
-    cat "$tmp" >&2
+  echo "DEBUG: raw response:" >&2
+  cat "$tmp" >&2
+  echo >&2
+
+  echo "DEBUG: response JSON type:" >&2
+  jq -r 'type' "$tmp" >&2 || {
+    echo "ERROR: response is not valid JSON" >&2
     rm -f "$tmp"
     return 1
+  }
+
+  if [ "$(jq -r 'type' "$tmp")" != "array" ]; then
+    echo "ERROR: expected JSON array from /events/reindex, got:" >&2
+    jq -c '.' "$tmp" >&2
+    rm -f "$tmp"
+    return 2
   fi
 
   jq -c --arg since "$since" \
