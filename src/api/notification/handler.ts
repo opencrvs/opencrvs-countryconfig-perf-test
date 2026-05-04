@@ -50,7 +50,7 @@ export async function emailHandler(
 ) {
   const payload = request.payload as EmailPayloads
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' || process.env.NOTIFICATIONS_ENABLED !== 'true') {
     logger.info(
       `Ignoring email due to NODE_ENV not being 'production'. Params: ${JSON.stringify(
         { ...payload, from: maskEmail(payload.from), to: maskEmail(payload.to) }
