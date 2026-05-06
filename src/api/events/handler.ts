@@ -11,6 +11,7 @@
 import { eventConfigs } from '@countryconfig/events'
 import * as Hapi from '@hapi/hapi'
 import { ActionConfirmationRequest } from '../registration'
+import { generateRegistrationNumber } from '../registration/registrationNumber'
 
 export function getEventsHandler(_: Hapi.Request, h: Hapi.ResponseToolkit) {
   return h.response(eventConfigs).code(200)
@@ -27,8 +28,11 @@ export async function onCustomActionHandler(
  * This catch-all action route will receive event actions with `Content-Type: application/json`
  */
 export async function onAnyActionHandler(
-  request: ActionConfirmationRequest,
+  request: Hapi.Request & { params: { action: string } },
   h: Hapi.ResponseToolkit
 ) {
+  if (request.params.action === 'REGISTER') {
+    return h.response({ registrationNumber: generateRegistrationNumber() }).code(200)
+  }
   return h.response().code(200)
 }
