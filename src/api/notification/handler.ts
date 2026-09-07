@@ -9,7 +9,6 @@
  * Copyright (C) The OpenCRVS Authors located at https://github.com/opencrvs/opencrvs-core/blob/master/AUTHORS.
  */
 import { logger, maskEmail, maskSms } from '@countryconfig/logger'
-import { env } from '@countryconfig/environment'
 import * as Hapi from '@hapi/hapi'
 import * as Joi from 'joi'
 import { COUNTRY_LOGO_URL, SENDER_EMAIL_ADDRESS } from './constant'
@@ -51,9 +50,9 @@ export async function emailHandler(
 ) {
   const payload = request.payload as EmailPayloads
 
-  if (env.NOTIFICATIONS_ENABLED !== true) {
+  if (process.env.NODE_ENV !== 'production') {
     logger.info(
-      `Ignoring email due to NOTIFICATIONS_ENABLED not being true. Params: ${JSON.stringify(
+      `Ignoring email due to NODE_ENV not being 'production'. Params: ${JSON.stringify(
         { ...payload, from: maskEmail(payload.from), to: maskEmail(payload.to) }
       )}`
     )
@@ -166,8 +165,8 @@ export async function notify({
     const subject = 'subject' in variable ? variable.subject : template.subject
     const emailBody = renderTemplate(template, variable)
 
-    if (env.NOTIFICATIONS_ENABLED !== true) {
-      logger.debug(
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
         `Sending email to ${email} with subject: ${subject}, body: ${JSON.stringify(emailBody)}`
       )
       return
@@ -302,6 +301,14 @@ function convertPayloadToVariable({
       }
     case TriggerEvent.ALL_USER_NOTIFICATION:
       return { subject: payload.subject, body: payload.body }
+    case TriggerEvent.PASSWORD_RESET_LINK:
+    case TriggerEvent.USERNAME_REMINDER_LINK:
+      return {
+        firstname,
+        applicationName: applicationConfig.APPLICATION_NAME,
+        countryLogo: COUNTRY_LOGO_URL,
+        recoveryURL: `${LOGIN_URL}recover?token=${encodeURIComponent(payload.token)}`
+      }
     default:
       throw new Error(`Unknown event: ${event}`)
   }
