@@ -90,36 +90,6 @@ export async function onRegisterHandler(
 }
 
 /**
- * Example function for asynchronously accepting a registration action.
- *
- * This should only be used when an action is in 'Requested' state (after returning HTTP 202
- * for the initial confirmation request). This function demonstrates how to accept a registration
- * that was previously placed in a pending state.
- *
- * For registration actions specifically, you must provide a registration number when accepting.
- * See the Action Confirmation documentation for more details on asynchronous confirmation flows.
- */
-async function acceptRequestedRegistration(
-  token: string,
-  eventId: string,
-  actionId: string,
-  action: ActionInput
-) {
-  const url = new URL('events', GATEWAY_URL).toString()
-  const client = createClient(url, `Bearer ${token}`)
-
-  const event = await client.event.actions.register.accept.mutate({
-    ...action,
-    transactionId: uuidv4(),
-    eventId,
-    actionId,
-    registrationNumber: generateRegistrationNumber()
-  })
-
-  return event
-}
-
-/**
  * Example function for asynchronously rejecting a registration action.
  *
  * This should only be used when an action is in 'Requested' state (after returning HTTP 202

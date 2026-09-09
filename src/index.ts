@@ -72,6 +72,12 @@ import {
 import { getClient } from './analytics/postgres'
 import { workqueueconfigHandler } from './api/workqueue/handler'
 import getUserNotificationRoutes from './config/routes/userNotificationRoutes'
+import {
+  telemetryHandler,
+  telemetrySchema,
+  TELEMETRY_DISABLED_NOTICE
+} from './api/telemetry/handler'
+import { env } from './environment'
 
 export interface ITokenPayload {
   sub: string
@@ -489,7 +495,7 @@ export async function createServer() {
 
   server.route({
     method: 'GET',
-    path: '/triggers/system/ready',
+    path: '/trigger/system/ready',
     handler: (_request, h) => {
       // Not implemented by default
       // You can use this endpoint to for instance set up integration clients
@@ -498,6 +504,20 @@ export async function createServer() {
     options: {
       tags: ['api', 'triggers'],
       description: 'System ready endpoint'
+    }
+  })
+
+  server.route({
+    method: 'POST',
+    path: '/trigger/telemetry',
+    handler: telemetryHandler,
+    options: {
+      tags: ['api', 'triggers'],
+      validate: {
+        payload: telemetrySchema
+      },
+      description:
+        'Receives a usage report from the events service and forwards it to the status service when telemetry is enabled'
     }
   })
 
@@ -589,6 +609,10 @@ export async function createServer() {
     logger.info(
       `Server successfully started on ${COUNTRY_CONFIG_HOST}:${COUNTRY_CONFIG_PORT}`
     )
+
+    if (!env.TELEMETRY_ENABLED) {
+      logger.info(TELEMETRY_DISABLED_NOTICE)
+    }
   }
 
   return { server, start, stop }
