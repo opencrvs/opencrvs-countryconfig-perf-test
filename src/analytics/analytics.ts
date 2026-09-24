@@ -21,7 +21,8 @@ import {
   EventDocument,
   EventState,
   getActionAnnotationFields,
-  getCurrentEventState,
+  deepDropNulls,
+  getDeclarationAfterEachAction,
   Location
 } from '@opencrvs/toolkit/events'
 
@@ -144,20 +145,24 @@ async function upsertAnalyticsEventActions(
   const allEventActions: ActionDocWithId[] = []
   for (const event of events) {
     const eventConfig = getEventConfig(event.type)
-    for (let i = 0; i < event.actions.length; i++) {
-      const actionsFromStartToCurrentPoint = event.actions
-        .sort((a, b) => {
-          // CREATE type always comes first
-          if (a.type === ActionType.CREATE && b.type !== ActionType.CREATE)
-            return -1
-          if (b.type === ActionType.CREATE && a.type !== ActionType.CREATE)
-            return 1
-          // Otherwise sort by createdAt
-          return a.createdAt.localeCompare(b.createdAt)
-        })
-        .slice(0, i + 1)
+    const actions = event.actions.slice().sort((a, b) => {
+      // CREATE type always comes first
+      if (a.type === ActionType.CREATE && b.type !== ActionType.CREATE)
+        return -1
+      if (b.type === ActionType.CREATE && a.type !== ActionType.CREATE) return 1
+      // Otherwise sort by createdAt
+      return a.createdAt.localeCompare(b.createdAt)
+    })
 
-      const action = event.actions[i]
+    /*
+     * Add date of declaration and date of registration to all events for each access
+     */
+    const declareAction = actions.find((a) => a.type === ActionType.DECLARE)
+    const registerAction = actions.find((a) => a.type === ActionType.REGISTER)
+    const declarations = getDeclarationAfterEachAction({ ...event, actions })
+
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i]
 
       if (
         action.status === ActionStatus.Requested ||
@@ -166,31 +171,16 @@ async function upsertAnalyticsEventActions(
         continue
       }
 
-      const actionAtCurrentPoint = getCurrentEventState(
-        {
-          ...event,
-          actions: actionsFromStartToCurrentPoint
-        },
-        eventConfig
-      )
-
       const { type, ...act } = action
 
       const actionConfig = eventConfig.actions.find((a) => a.type === type)
 
       const annotation = actionConfig
         ? pickAnnotationAnalyticsFields(
-            getAnnotation(action, event.actions),
+            getAnnotation(action, actions),
             actionConfig
           )
         : {}
-
-      const actions = event.actions
-      /*
-       * Add date of declaration and date of registration to all events for each access
-       */
-      const declareAction = actions.find((a) => a.type === ActionType.DECLARE)
-      const registerAction = actions.find((a) => a.type === ActionType.REGISTER)
 
       const actionWithFilteredDeclaration = {
         ...act,
@@ -204,7 +194,7 @@ async function upsertAnalyticsEventActions(
           precalculateAdditionalAnalytics(
             action,
             pickDeclarationAnalyticsFields(
-              actionAtCurrentPoint.declaration,
+              deepDropNulls(declarations[i]),
               eventConfig
             ),
             eventConfig
